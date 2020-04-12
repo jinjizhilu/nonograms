@@ -1,4 +1,5 @@
 import time
+import cProfile
 
 # init
 DEBUG = False 
@@ -100,6 +101,8 @@ def init_results_all():
                 new_results.append(result)
 
         row_results_all[i] = new_results
+        row_results[i].append(new_results)
+        row_results[i].append([])
 
     for i in range(col_count):
         new_results = []
@@ -114,51 +117,63 @@ def init_results_all():
                 new_results.append(result)
 
         col_results_all[i] = new_results
+        col_results[i].append(new_results)
+        col_results[i].append([])
 
-def update_results():
+def update_results(type):
     time0 = time.time()
     min_result_count = -1
-    for i in range(row_count):
-        if not row_locked[i]:
-            row_results[i].clear()
 
-            for result in row_results_all[i]:
-                is_matched = True
-                for j in range(col_count):
-                    if row_locked[i] or col_locked[j]:
-                        if grids[i][j] != result[j]:
-                            is_matched = False
-                            break
-                if is_matched:
-                    row_results[i].append(result)
+    if type in ["row", "all"]:
+        for i in range(row_count):
+            new_results = []
+            last_results = row_results[i][-2]
 
-            result_count = len(row_results[i])
-            if min_result_count == -1 or min_result_count > result_count:
-                min_result_count = result_count
+            if not row_locked[i]:
+                for result in last_results:
+                    is_matched = True
+                    for j in range(col_count):
+                        if row_locked[i] or col_locked[j]:
+                            if grids[i][j] != result[j]:
+                                is_matched = False
+                                break
+                    if is_matched:
+                        new_results.append(result)
 
-                if result_count == 0:
-                    break
+                row_results[i][-1] = new_results
 
-    for i in range(col_count):
-        if not col_locked[i]:
-            col_results[i].clear()
+                result_count = len(new_results)
+                if min_result_count == -1 or min_result_count > result_count:
+                    min_result_count = result_count
 
-            for result in col_results_all[i]:
-                is_matched = True
-                for j in range(row_count):
-                    if row_locked[j] or col_locked[i]:
-                        if grids[j][i] != result[j]:
-                            is_matched = False
-                            break
-                if is_matched:
-                    col_results[i].append(result)
+                    if result_count == 0:
+                        break
 
-            result_count = len(col_results[i])
-            if min_result_count == -1 or min_result_count > result_count:
-                min_result_count = result_count
+    if type in ["col", "all"]:
+        for i in range(col_count):
+            if not col_locked[i]:
+                new_results = []
+                last_results = col_results[i][-2]
 
-                if result_count == 0:
-                    break
+                for result in col_results_all[i]:
+                    is_matched = True
+                    for j in range(row_count):
+                        if row_locked[j] or col_locked[i]:
+                            if grids[j][i] != result[j]:
+                                is_matched = False
+                                break
+                    if is_matched:
+                        new_results.append(result)
+
+                col_results[i][-1] = new_results
+
+                result_count = len(new_results)
+                if min_result_count == -1 or min_result_count > result_count:
+                    min_result_count = result_count
+
+                    if result_count == 0:
+                        break
+
     time_cost[0] = time_cost[0] + time.time() - time0
     time_cost[1] = time_cost[1] + 1
 
@@ -167,12 +182,12 @@ def update_results():
 def get_next_line_id(min_result_count):
     for i in range(row_count):
         if not row_locked[i]:
-            if len(row_results[i]) == min_result_count:
+            if len(row_results[i][-1]) == min_result_count:
                 return i, True
 
     for i in range(col_count):
         if not col_locked[i]:
-            if len(col_results[i]) == min_result_count:
+            if len(col_results[i][-1]) == min_result_count:
                 return i, False
 
 def try_line(id, is_row):
@@ -180,7 +195,7 @@ def try_line(id, is_row):
         print("trying %s %d" % (is_row and "row" or "col", id))
 
     line_count = is_row and col_count or row_count
-    line_results = is_row and row_results[id] or col_results[id]
+    line_results = is_row and row_results[id][-1] or col_results[id][-1]
 
     if is_row:
         row_locked[id] = True
@@ -188,7 +203,13 @@ def try_line(id, is_row):
         col_locked[id] = True
 
     if DEBUG:
-        print(line_results)
+        print("line_result", line_results)
+
+    for i in range(line_count):
+        if is_row:
+            row_results[i].append([])
+        else:
+            col_results[i].append([])
 
     for line in line_results:
         # check & set value
@@ -199,13 +220,14 @@ def try_line(id, is_row):
                 grids[i][id] = line[i]
 
         # try next line
-        min_result_count = update_results()
+        min_result_count = update_results(is_row and "col" or "row")
         if DEBUG:
-            print(min_result_count)
+            print("min_result_count", min_result_count)
 
         if min_result_count == 0: # conflict
             continue
         elif min_result_count == -1: # succeed
+            print("success!")
             return True
         else:
             if DEBUG:
@@ -218,9 +240,11 @@ def try_line(id, is_row):
     # restore value
     for i in range(line_count):
         if is_row:
+            row_results[i].pop()
             if not col_locked[i]:
                 grids[id][i] = 0
         else:
+            col_results[i].pop()
             if not row_locked[i]:
                 grids[i][id] = 0 
 
@@ -234,13 +258,13 @@ def try_line(id, is_row):
 def main():
     init_results_all()
 
-    min_result_count = update_results()
+    min_result_count = update_results("all")
     id, is_row = get_next_line_id(min_result_count)
 
-    try_line(id, is_row)
+    p = cProfile.Profile()
+    p.runcall(try_line, id, is_row)
+    p.print_stats()
 
-    # for line in get_lines([2, 1, 4], 10):
-    #     print(line)
     print("==result==")
     print_grids()
 
