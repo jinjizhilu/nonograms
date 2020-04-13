@@ -24,6 +24,8 @@ row_results_all = []
 col_results_all = []
 row_results = [[] for i in range(row_count)]
 col_results = [[] for i in range(col_count)]
+last_progress_time = 0
+progress = 0
 
 # search
 def print_grids():
@@ -135,56 +137,63 @@ def init_results():
 
     return min_result_count
 
-def update_results(id, is_row = False):
+def update_results(changed_pos, id, is_row = False):
     time0 = time.time()
     min_result_count = -1
+
+    if DEBUG:
+        print("changed_pos", changed_pos)
 
     if not is_row:
         for i in range(row_count):
             if not row_locked[i]:
-                new_results = []
-                last_results = row_results[i][-2]
+                if i in changed_pos:
+                    changed_pos.remove(i)
+                    new_results = []
+                    last_results = row_results[i][-2]
 
-                for result in last_results:
-                    if grids[i][id] == result[id]:
-                        new_results.append(result)
+                    for result in last_results:
+                        if grids[i][id] == result[id]:
+                            new_results.append(result)
 
-                row_results[i][-1] = new_results
-                if DEBUG:
-                    print("row", i, len(row_results[i]), new_results)
+                    row_results[i][-1] = new_results
+                    if DEBUG:
+                        print("row", i, len(row_results[i]), new_results)
 
-                result_count = len(new_results)
+                result_count = len(row_results[i][-1])
                 if min_result_count == -1 or min_result_count > result_count:
                     min_result_count = result_count
 
                     if result_count == 0:
-                        break
+                        return 0, changed_pos
 
     if is_row:
         for i in range(col_count):
             if not col_locked[i]:
-                new_results = []
-                last_results = col_results[i][-2]
+                if i in changed_pos:
+                    changed_pos.remove(i)
+                    new_results = []
+                    last_results = col_results[i][-2]
 
-                for result in last_results:
-                    if grids[id][i] == result[id]:
-                        new_results.append(result)
+                    for result in last_results:
+                        if grids[id][i] == result[id]:
+                            new_results.append(result)
 
-                col_results[i][-1] = new_results
-                if DEBUG:
-                    print("col", i, len(col_results[i]), new_results)
+                    col_results[i][-1] = new_results
+                    if DEBUG:
+                        print("col", i, len(col_results[i]), new_results)
 
-                result_count = len(new_results)
+                result_count = len(col_results[i][-1])
                 if min_result_count == -1 or min_result_count > result_count:
                     min_result_count = result_count
 
                     if result_count == 0:
-                        break
+                        return 0, changed_pos
 
     time_cost[0] = time_cost[0] + time.time() - time0
     time_cost[1] = time_cost[1] + 1
 
-    return min_result_count
+    return min_result_count, []
 
 def get_next_line_id(min_result_count):
     for i in range(row_count):
@@ -197,9 +206,22 @@ def get_next_line_id(min_result_count):
             if len(col_results[i][-1]) == min_result_count:
                 return i, False
 
-def try_line(id, is_row):
+def find_changed_pos(line, last_line, last_changed_pos):
+    result = last_changed_pos
+    for i in range(len(line)):
+        if line[i] != last_line[i] and not i in result:
+            result.append(i)
+    return result
+
+def try_line(id, is_row, ratio):
     if DEBUG:
         print("trying %s %d" % (is_row and "row" or "col", id))
+
+    global progress
+    global last_progress_time
+    if time.time() - last_progress_time > 0.2:
+        last_progress_time = time.time()
+        print("current progress: %.4f%%" % (progress * 100))
 
     line_count = is_row and col_count or row_count
     line_results = is_row and row_results[id][-1] or col_results[id][-1]
@@ -221,20 +243,27 @@ def try_line(id, is_row):
             row_results[i].append([])
             line_record.append(grids[i][id])
 
+    last_line = [-1] * line_count
+    last_changed_pos = []
+
     for line in line_results:
         # check & set value
         for i in range(line_count):
             if is_row:
-                grids[id][i] = line[i] 
+                grids[id][i] = line[i]
             else:
                 grids[i][id] = line[i]
 
         # try next line
-        min_result_count = update_results(id, is_row)
+        changed_pos = find_changed_pos(line, last_line, last_changed_pos)
+        last_line = line
+
+        min_result_count, last_changed_pos = update_results(changed_pos, id, is_row)
         if DEBUG:
             print("min_result_count", min_result_count)
 
         if min_result_count == 0: # conflict
+            progress += ratio / len(line_results)
             continue
         elif min_result_count == -1: # succeed
             print("success!")
@@ -244,7 +273,7 @@ def try_line(id, is_row):
                 print_grids()
 
             next_id, next_is_row = get_next_line_id(min_result_count)
-            if try_line(next_id, next_is_row):
+            if try_line(next_id, next_is_row, ratio / len(line_results)):
                 return True
 
     # restore value
@@ -273,7 +302,7 @@ def main():
     id, is_row = get_next_line_id(min_result_count)
 
     p = cProfile.Profile()
-    p.runcall(try_line, id, is_row)
+    p.runcall(try_line, id, is_row, 1.0)
     p.print_stats()
 
     print("==result==")
