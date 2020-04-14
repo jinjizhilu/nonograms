@@ -2,10 +2,11 @@ import time
 import cProfile
 
 # init
+PROFILE = True
 DEBUG = False 
 time_cost = [0] * 5
 
-lines = open("puzzle_25x25.txt").readlines()
+lines = open("puzzle_30x30.txt").readlines()
 
 row_count, col_count = list(map(int, lines[0].strip().split()))
 row_hints = []
@@ -58,65 +59,72 @@ def init_results_all():
     for i in range(col_count):
         col_results_all.append(get_lines(col_hints[i], row_count))
 
-    # check fix grids
-    is_fixed_row = [[True] * col_count for i in range(row_count)]
-    is_fixed_col = [[True] * col_count for i in range(row_count)]
+    while True:
+        # check fix grids
+        is_fixed_row = [[True] * col_count for i in range(row_count)]
+        is_fixed_col = [[True] * col_count for i in range(row_count)]
 
-    for i in range(row_count):
-        fix_value = row_results_all[i][0]
+        for i in range(row_count):
+            fix_value = row_results_all[i][0]
 
-        for j in range(col_count):
-            for result in row_results_all[i]:
-                if result[j] != fix_value[j]:
-                    is_fixed_row[i][j] = False
-                    break
-
-    for i in range(col_count):
-        fix_value = col_results_all[i][0]
-
-        for j in range(row_count):
-            for result in col_results_all[i]:
-                if result[j] != fix_value[j]:
-                    is_fixed_col[j][i] = False
-                    break
-
-    # set fixed grids
-    for i in range(row_count):
-        for j in range(col_count):
-            if is_fixed_row[i][j]:
-                grids[i][j] = row_results_all[i][0][j]
-
-            if is_fixed_col[i][j]:
-                grids[i][j] = col_results_all[j][0][i]
-
-    # filter result by fixed grids
-    for i in range(row_count):
-        new_results = []
-        for result in row_results_all[i]:
-            is_matched = True
             for j in range(col_count):
-                if is_fixed_row[i][j] or is_fixed_col[i][j]:
-                    if result[j] != grids[i][j]:
-                        is_matched = False
+                for result in row_results_all[i]:
+                    if result[j] != fix_value[j]:
+                        is_fixed_row[i][j] = False
                         break
-            if is_matched:
-                new_results.append(result)
 
-        row_results_all[i] = new_results
+        for i in range(col_count):
+            fix_value = col_results_all[i][0]
 
-    for i in range(col_count):
-        new_results = []
-        for result in col_results_all[i]:
-            is_matched = True
             for j in range(row_count):
-                if is_fixed_row[j][i] or is_fixed_col[j][i]:
-                    if result[j] != grids[j][i]:
-                        is_matched = False
+                for result in col_results_all[i]:
+                    if result[j] != fix_value[j]:
+                        is_fixed_col[j][i] = False
                         break
-            if is_matched:
-                new_results.append(result)
 
-        col_results_all[i] = new_results
+        # set fixed grids
+        for i in range(row_count):
+            for j in range(col_count):
+                if is_fixed_row[i][j]:
+                    grids[i][j] = row_results_all[i][0][j]
+
+                if is_fixed_col[i][j]:
+                    grids[i][j] = col_results_all[j][0][i]
+
+        # filter result by fixed grids
+        is_updated = False
+        for i in range(row_count):
+            new_results = []
+            for result in row_results_all[i]:
+                is_matched = True
+                for j in range(col_count):
+                    if is_fixed_row[i][j] or is_fixed_col[i][j]:
+                        if result[j] != grids[i][j]:
+                            is_matched = False
+                            is_updated = True
+                            break
+                if is_matched:
+                    new_results.append(result)
+
+            row_results_all[i] = new_results
+
+        for i in range(col_count):
+            new_results = []
+            for result in col_results_all[i]:
+                is_matched = True
+                for j in range(row_count):
+                    if is_fixed_row[j][i] or is_fixed_col[j][i]:
+                        if result[j] != grids[j][i]:
+                            is_matched = False
+                            is_updated = True
+                            break
+                if is_matched:
+                    new_results.append(result)
+
+            col_results_all[i] = new_results
+
+        if not is_updated:
+            break
 
 def init_results():
     min_result_count = -1
@@ -221,7 +229,7 @@ def try_line(id, is_row, ratio):
     global last_progress_time
     if time.time() - last_progress_time > 0.2:
         last_progress_time = time.time()
-        print("current progress: %.4f%%" % (progress * 100))
+        print("current progress: %.6f%%" % (progress * 100))
 
     line_count = is_row and col_count or row_count
     line_results = is_row and row_results[id][-1] or col_results[id][-1]
@@ -296,14 +304,20 @@ def try_line(id, is_row, ratio):
     return False
 
 def main():
-    init_results_all()
+    p = cProfile.Profile()
+    if PROFILE:
+        p.runcall(init_results_all)
+    else:
+        init_results_all()
 
     min_result_count = init_results()
     id, is_row = get_next_line_id(min_result_count)
-
-    p = cProfile.Profile()
-    p.runcall(try_line, id, is_row, 1.0)
-    p.print_stats()
+ 
+    if PROFILE:
+        p.runcall(try_line, id, is_row, 1.0)
+        p.print_stats()
+    else:
+        try_line(id, is_row, 1.0)
 
     print("==result==")
     print_grids()
