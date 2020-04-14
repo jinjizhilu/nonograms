@@ -3,7 +3,7 @@ import cProfile
 
 # init
 PROFILE = True
-DEBUG = False 
+DEBUG = True
 time_cost = [0] * 5
 
 lines = open("puzzle_30x30.txt").readlines()
@@ -18,7 +18,7 @@ for line in lines[1 : 1 + row_count]:
 for line in lines[1 + row_count:]:
     col_hints.append(list(map(int, line.strip().split())))
 
-grids = [[0] * col_count for i in range(row_count)]
+grids = [[9] * col_count for i in range(row_count)]
 row_locked = [False] * row_count
 col_locked = [False] * col_count
 row_results_all = []
@@ -34,30 +34,80 @@ def print_grids():
         print("  ".join(map(str, row)))
     print("=" * 50)
 
-def generate_line(hint, empty_count):
+def generate_line(hint, line_limit, empty_count):
     results = []
     for i in range(empty_count + 1):
         prefix = [0] * i + [1 for _ in range(hint[0])]
 
+        limit_ok = True
+        for j in range(len(prefix)):
+            if line_limit[j] != 9 and line_limit[j] != prefix[j]:
+                limit_ok = False
+                break
+
+        if not limit_ok:
+            continue
+
         if len(hint) > 1:
-            for rest_part in generate_line(hint[1:], empty_count - i):
+            for rest_part in generate_line(hint[1:], line_limit[len(prefix) + 1:], empty_count - i):
                 results.append(prefix + [0] + rest_part)
         else:
             results.append(prefix + [0 for _ in range(empty_count - i)])
 
     return results
 
-def get_lines(line_hint, line_count):
-    empty_count = line_count - (sum(line_hint) + len(line_hint) - 1);
-    return generate_line(line_hint, empty_count)
+def get_lines(line_hint, line_limit, line_count):
+    empty_count = line_count - (sum(line_hint) + len(line_hint) - 1)
+    return generate_line(line_hint, line_limit, empty_count)
 
-def init_results_all():
-    # find all possible results
+def get_col(id):
+    result = []
     for i in range(row_count):
-        row_results_all.append(get_lines(row_hints[i], col_count))
+        result.append(grids[i][id])
+    return result
+
+def init_fixed_grids():
+    for i in range(row_count):
+        empty_count = col_count - (sum(row_hints[i]) + len(row_hints[i]) - 1)
+
+        col_id = -1
+        for hint in row_hints[i]:
+            col_id = col_id + hint
+            if hint > empty_count:
+                for j in range(hint - empty_count):
+                    grids[i][col_id - j] = 1
+            col_id = col_id + 1
 
     for i in range(col_count):
-        col_results_all.append(get_lines(col_hints[i], row_count))
+        empty_count = row_count - (sum(col_hints[i]) + len(col_hints[i]) - 1)
+
+        row_id = -1
+        for hint in col_hints[i]:
+            row_id = row_id + hint
+            if hint > empty_count:
+                for j in range(hint - empty_count):
+                    grids[row_id - j][i] = 1
+            row_id = row_id + 1
+
+    if DEBUG:
+        print_grids()
+
+def init_results_all():
+    init_fixed_grids()
+
+    # find all possible results
+    for i in range(row_count):
+        lines = get_lines(row_hints[i], grids[i], col_count)
+        row_results_all.append(lines)
+        if DEBUG:
+            print("line count for row %d: %d" % (i, len(lines)))
+
+    for i in range(col_count):
+        lines = get_lines(col_hints[i], get_col(i), row_count)
+        col_results_all.append(lines)
+
+        if DEBUG:
+            print("line count for col %d: %d" % (i, len(lines)))
 
     while True:
         # check fix grids
@@ -91,6 +141,9 @@ def init_results_all():
                 if is_fixed_col[i][j]:
                     grids[i][j] = col_results_all[j][0][i]
 
+        if DEBUG:
+            print_grids()
+
         # filter result by fixed grids
         is_updated = False
         for i in range(row_count):
@@ -98,11 +151,10 @@ def init_results_all():
             for result in row_results_all[i]:
                 is_matched = True
                 for j in range(col_count):
-                    if is_fixed_row[i][j] or is_fixed_col[i][j]:
-                        if result[j] != grids[i][j]:
-                            is_matched = False
-                            is_updated = True
-                            break
+                    if grids[i][j] != 9 and result[j] != grids[i][j]:
+                        is_matched = False
+                        is_updated = True
+                        break
                 if is_matched:
                     new_results.append(result)
 
@@ -113,15 +165,20 @@ def init_results_all():
             for result in col_results_all[i]:
                 is_matched = True
                 for j in range(row_count):
-                    if is_fixed_row[j][i] or is_fixed_col[j][i]:
-                        if result[j] != grids[j][i]:
-                            is_matched = False
-                            is_updated = True
-                            break
+                    if grids[j][i] != 9 and result[j] != grids[j][i]:
+                        is_matched = False
+                        is_updated = True
+                        break
                 if is_matched:
                     new_results.append(result)
 
             col_results_all[i] = new_results
+
+        if DEBUG:
+            for i in range(row_count):
+                print("line count for row %d: %d" % (i, len(row_results_all[i])))
+            for i in range(col_count):
+                print("line count for col %d: %d" % (i, len(col_results_all[i])))
 
         if not is_updated:
             break
