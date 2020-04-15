@@ -4,7 +4,6 @@ import cProfile
 # init
 PROFILE = True
 DEBUG = True
-time_cost = [0] * 5
 
 lines = open("puzzle_30x30.txt").readlines()
 
@@ -21,8 +20,8 @@ for line in lines[1 + row_count:]:
 grids = [[9] * col_count for i in range(row_count)]
 row_locked = [False] * row_count
 col_locked = [False] * col_count
-row_results_all = []
-col_results_all = []
+row_results_all = [[] for i in range(row_count)]
+col_results_all = [[] for i in range(col_count)]
 row_results = [[] for i in range(row_count)]
 col_results = [[] for i in range(col_count)]
 last_progress_time = 0
@@ -48,6 +47,11 @@ def generate_line(hint, line_limit, empty_count):
         if not limit_ok:
             continue
 
+        if len(prefix) < len(line_limit):
+            limit = line_limit[len(prefix)]
+            if limit != 9 and limit != 0:
+                continue
+
         if len(hint) > 1:
             for rest_part in generate_line(hint[1:], line_limit[len(prefix) + 1:], empty_count - i):
                 results.append(prefix + [0] + rest_part)
@@ -58,7 +62,11 @@ def generate_line(hint, line_limit, empty_count):
 
 def get_lines(line_hint, line_limit, line_count):
     empty_count = line_count - (sum(line_hint) + len(line_hint) - 1)
-    return generate_line(line_hint, line_limit, empty_count)
+    results = generate_line(line_hint, line_limit, empty_count)
+    # if DEBUG:
+    #     print(line_hint, line_limit, results)
+
+    return results
 
 def get_col(id):
     result = []
@@ -92,54 +100,39 @@ def init_fixed_grids():
     if DEBUG:
         print_grids()
 
+def update_fixed_grids(line_results_all):
+    fix_value = line_results_all[0][:] # copy this
+    for i in range(len(fix_value)):
+        for result in line_results_all:
+            if result[i] != fix_value[i]:
+                fix_value[i] = 9
+                break
+    if DEBUG:
+        print("fix_value", fix_value)
+    return fix_value
+
 def init_results_all():
     init_fixed_grids()
 
-    # find all possible results
     for i in range(row_count):
-        lines = get_lines(row_hints[i], grids[i], col_count)
-        row_results_all.append(lines)
-        if DEBUG:
-            print("line count for row %d: %d" % (i, len(lines)))
+        row_results_all[i] = get_lines(row_hints[i], grids[i], col_count)
 
     for i in range(col_count):
-        lines = get_lines(col_hints[i], get_col(i), row_count)
-        col_results_all.append(lines)
-
-        if DEBUG:
-            print("line count for col %d: %d" % (i, len(lines)))
+        col_results_all[i] = get_lines(col_hints[i], get_col(i), row_count)
 
     while True:
         # check fix grids
-        is_fixed_row = [[True] * col_count for i in range(row_count)]
-        is_fixed_col = [[True] * col_count for i in range(row_count)]
-
         for i in range(row_count):
-            fix_value = row_results_all[i][0]
-
+            fix_value = update_fixed_grids(row_results_all[i])
             for j in range(col_count):
-                for result in row_results_all[i]:
-                    if result[j] != fix_value[j]:
-                        is_fixed_row[i][j] = False
-                        break
+                if fix_value[j] != 9: # do not overwrite value set by col
+                    grids[i][j] = fix_value[j]
 
         for i in range(col_count):
-            fix_value = col_results_all[i][0]
-
+            fix_value = update_fixed_grids(col_results_all[i])
             for j in range(row_count):
-                for result in col_results_all[i]:
-                    if result[j] != fix_value[j]:
-                        is_fixed_col[j][i] = False
-                        break
-
-        # set fixed grids
-        for i in range(row_count):
-            for j in range(col_count):
-                if is_fixed_row[i][j]:
-                    grids[i][j] = row_results_all[i][0][j]
-
-                if is_fixed_col[i][j]:
-                    grids[i][j] = col_results_all[j][0][i]
+                if fix_value[j] != 9: # do not overwrite value set by row
+                    grids[j][i] = fix_value[j]
 
         if DEBUG:
             print_grids()
@@ -203,7 +196,6 @@ def init_results():
     return min_result_count
 
 def update_results(changed_pos, id, is_row = False):
-    time0 = time.time()
     min_result_count = -1
 
     if DEBUG:
@@ -254,9 +246,6 @@ def update_results(changed_pos, id, is_row = False):
 
                     if result_count == 0:
                         return 0, changed_pos
-
-    time_cost[0] = time_cost[0] + time.time() - time0
-    time_cost[1] = time_cost[1] + 1
 
     return min_result_count, []
 
@@ -378,8 +367,6 @@ def main():
 
     print("==result==")
     print_grids()
-
-    print(time_cost)
 
 if __name__ == "__main__":
     main()
