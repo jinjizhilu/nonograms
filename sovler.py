@@ -5,7 +5,7 @@ import cProfile
 PROFILE = True
 DEBUG = True
 
-lines = open("puzzle_30x30.txt").readlines()
+lines = open("puzzle_50x50.txt").readlines()
 
 row_count, col_count = list(map(int, lines[0].strip().split()))
 row_hints = []
@@ -44,13 +44,16 @@ def generate_line(hint, line_limit, empty_count):
                 limit_ok = False
                 break
 
+        extra_check_count = (len(hint) > 1) and 1 or empty_count - i
+        extra_check_count = min(extra_check_count, len(line_limit) - len(prefix))
+        for j in range(extra_check_count):
+            limit = line_limit[len(prefix) + j]
+            if limit != 9 and limit != 0:
+                limit_ok = False
+                break
+
         if not limit_ok:
             continue
-
-        if len(prefix) < len(line_limit):
-            limit = line_limit[len(prefix)]
-            if limit != 9 and limit != 0:
-                continue
 
         if len(hint) > 1:
             for rest_part in generate_line(hint[1:], line_limit[len(prefix) + 1:], empty_count - i):
@@ -100,81 +103,100 @@ def init_fixed_grids():
     if DEBUG:
         print_grids()
 
-def update_fixed_grids(line_results_all):
-    fix_value = line_results_all[0][:] # copy this
-    for i in range(len(fix_value)):
-        for result in line_results_all:
-            if result[i] != fix_value[i]:
-                fix_value[i] = 9
+def check_fix_grids(fix_value, line):
+    for i in range(len(line)):
+        if fix_value[i] == -1:
+            fix_value[i] = line[i]
+            continue
+
+        if fix_value[i] != 9 and fix_value[i] != line[i]:
+            fix_value[i] = 9
+
+    return fix_value
+
+def generate_fixed_grids(hint, line_limit, empty_count):
+    fix_value = [-1] * len(line_limit)
+
+    is_valid = False
+    for i in range(empty_count + 1):
+        prefix = [0] * i + [1 for _ in range(hint[0])]
+
+        limit_ok = True
+        for j in range(len(prefix)):
+            if line_limit[j] != 9 and line_limit[j] != prefix[j]:
+                limit_ok = False
                 break
-    if DEBUG:
-        print("fix_value", fix_value)
+
+        extra_check_count = (len(hint) > 1) and 1 or empty_count - i
+        extra_check_count = min(extra_check_count, len(line_limit) - len(prefix))
+        for j in range(extra_check_count):
+            limit = line_limit[len(prefix) + j]
+            if limit != 9 and limit != 0:
+                limit_ok = False
+                break
+
+        if not limit_ok:
+            continue
+
+        if len(hint) > 1:
+            is_valid2, fix_value2 = generate_fixed_grids(hint[1:], line_limit[len(prefix) + 1:], empty_count - i)
+            if is_valid2:
+                is_valid = True
+                fix_value = check_fix_grids(fix_value, prefix + [0] + fix_value2)
+        else:
+            is_valid = True
+            fix_value = check_fix_grids(fix_value, prefix + [0 for _ in range(empty_count - i)])
+
+    return is_valid, fix_value
+
+def get_fixed_grids(line_hint, line_limit, line_count):
+    empty_count = line_count - (sum(line_hint) + len(line_hint) - 1)
+    is_valid, fix_value = generate_fixed_grids(line_hint, line_limit, empty_count)
+    # if DEBUG:
+    #     if line_limit != fix_value:
+    #         print(line_hint, is_valid)
+    #         print(line_limit)
+    #         print(fix_value)
+
+    if not is_valid:
+        fix_value = [9] * line_count
+
     return fix_value
 
 def init_results_all():
     init_fixed_grids()
 
-    for i in range(row_count):
-        row_results_all[i] = get_lines(row_hints[i], grids[i], col_count)
-
-    for i in range(col_count):
-        col_results_all[i] = get_lines(col_hints[i], get_col(i), row_count)
-
     while True:
-        # check fix grids
+        is_updated = False
         for i in range(row_count):
-            fix_value = update_fixed_grids(row_results_all[i])
+            fix_value = get_fixed_grids(row_hints[i], grids[i], col_count)
             for j in range(col_count):
-                if fix_value[j] != 9: # do not overwrite value set by col
+                if fix_value[j] != 9 and grids[i][j] != fix_value[j]: # do not overwrite value set by col
                     grids[i][j] = fix_value[j]
+                    is_updated = True
 
         for i in range(col_count):
-            fix_value = update_fixed_grids(col_results_all[i])
+            fix_value = get_fixed_grids(col_hints[i], get_col(i), row_count)
             for j in range(row_count):
-                if fix_value[j] != 9: # do not overwrite value set by row
+                if fix_value[j] != 9 and grids[j][i] != fix_value[j]: # do not overwrite value set by row
                     grids[j][i] = fix_value[j]
+                    is_updated = True
 
         if DEBUG:
             print_grids()
 
-        # filter result by fixed grids
-        is_updated = False
-        for i in range(row_count):
-            new_results = []
-            for result in row_results_all[i]:
-                is_matched = True
-                for j in range(col_count):
-                    if grids[i][j] != 9 and result[j] != grids[i][j]:
-                        is_matched = False
-                        is_updated = True
-                        break
-                if is_matched:
-                    new_results.append(result)
-
-            row_results_all[i] = new_results
-
-        for i in range(col_count):
-            new_results = []
-            for result in col_results_all[i]:
-                is_matched = True
-                for j in range(row_count):
-                    if grids[j][i] != 9 and result[j] != grids[j][i]:
-                        is_matched = False
-                        is_updated = True
-                        break
-                if is_matched:
-                    new_results.append(result)
-
-            col_results_all[i] = new_results
-
-        if DEBUG:
-            for i in range(row_count):
-                print("line count for row %d: %d" % (i, len(row_results_all[i])))
-            for i in range(col_count):
-                print("line count for col %d: %d" % (i, len(col_results_all[i])))
-
         if not is_updated:
             break
+
+    for i in range(row_count):
+        row_results_all[i] = get_lines(row_hints[i], grids[i], col_count)
+        if DEBUG:
+            print("line count for row %d: %d" % (i, len(row_results_all[i])))
+
+    for i in range(col_count):
+        col_results_all[i] = get_lines(col_hints[i], get_col(i), row_count)
+        if DEBUG:
+            print("line count for col %d: %d" % (i, len(col_results_all[i])))
 
 def init_results():
     min_result_count = -1
@@ -356,6 +378,7 @@ def main():
     else:
         init_results_all()
 
+    #return
     min_result_count = init_results()
     id, is_row = get_next_line_id(min_result_count)
  
