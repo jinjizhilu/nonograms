@@ -2,10 +2,10 @@ import time
 import cProfile
 
 # init
-PROFILE = True
-DEBUG = False
+PROFILE = False 
+DEBUG = False 
 
-lines = open("puzzle_30x30.txt").readlines()
+lines = open("puzzle_50x50.txt").readlines()
 
 row_count, col_count = list(map(int, lines[0].strip().split()))
 row_hints = []
@@ -114,8 +114,16 @@ def check_fix_grids(fix_value, line):
 
     return fix_value
 
+generate_fixed_grids_dict = {}
+def calc_generate_fixed_grids_key(hint, line_limit, empty_count):
+    return str(empty_count) + "".join(map(str, hint)) + "".join(map(str, line_limit))
+
 def generate_fixed_grids(hint, line_limit, empty_count):
     fix_value = [-1] * len(line_limit)
+
+    key = calc_generate_fixed_grids_key(hint, line_limit, empty_count)
+    if key in generate_fixed_grids_dict:
+        return generate_fixed_grids_dict[key]
 
     is_valid = False
     for i in range(empty_count + 1):
@@ -147,6 +155,7 @@ def generate_fixed_grids(hint, line_limit, empty_count):
             is_valid = True
             fix_value = check_fix_grids(fix_value, prefix + [0 for _ in range(empty_count - i)])
 
+    generate_fixed_grids_dict[key] = (is_valid, fix_value)
     return is_valid, fix_value
 
 def get_fixed_grids(line_hint, line_limit, line_count):
@@ -176,12 +185,14 @@ def count_fixed_grids(line):
 def update_fixed_grid_info():
     result = []
     for i in range(row_count):
-        result.append((True, i, count_fixed_grids(grids[i])))
+        empty_count = col_count - (sum(row_hints[i]) + len(row_hints[i]) - 1)
+        result.append((True, i, count_fixed_grids(grids[i]), empty_count))
 
     for i in range(col_count):
-        result.append((False, i, count_fixed_grids(get_col(i))))
+        empty_count = row_count - (sum(col_hints[i]) + len(col_hints[i]) - 1)
+        result.append((False, i, count_fixed_grids(get_col(i)), empty_count))
 
-    result.sort(lambda x: x[2])
+    result.sort(key = lambda x: x[2] * 100 - x[3])
     return result
 
 def init_results_all():
@@ -192,20 +203,20 @@ def init_results_all():
     last_check_col_limit = [0] * col_count
 
     while len(fixed_grid_info) > 0:
-        is_row, i, count = fixed_grid_info[-1]
+        is_row, i, fix_count, empty_count = fixed_grid_info[-1]
 
         is_updated = False
         if is_row:
-            if last_check_row_limit[i] != count:
-                last_check_row_limit[i] = count
+            if last_check_row_limit[i] != fix_count:
+                last_check_row_limit[i] = fix_count
                 fix_value = get_fixed_grids(row_hints[i], grids[i], col_count)
                 for j in range(col_count):
                     if fix_value[j] != 9 and grids[i][j] != fix_value[j]: # do not overwrite value set by col
                         grids[i][j] = fix_value[j]
                         is_updated = True
         else:
-            if last_check_col_limit[i] != count:
-                last_check_col_limit[i] = count
+            if last_check_col_limit[i] != fix_count:
+                last_check_col_limit[i] = fix_count
                 fix_value = get_fixed_grids(col_hints[i], get_col(i), row_count)
                 for j in range(row_count):
                     if fix_value[j] != 9 and grids[j][i] != fix_value[j]: # do not overwrite value set by row
