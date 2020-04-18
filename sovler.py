@@ -77,32 +77,6 @@ def get_col(id):
         result.append(grids[i][id])
     return result
 
-def init_fixed_grids():
-    for i in range(row_count):
-        empty_count = col_count - (sum(row_hints[i]) + len(row_hints[i]) - 1)
-
-        col_id = -1
-        for hint in row_hints[i]:
-            col_id = col_id + hint
-            if hint > empty_count:
-                for j in range(hint - empty_count):
-                    grids[i][col_id - j] = 1
-            col_id = col_id + 1
-
-    for i in range(col_count):
-        empty_count = row_count - (sum(col_hints[i]) + len(col_hints[i]) - 1)
-
-        row_id = -1
-        for hint in col_hints[i]:
-            row_id = row_id + hint
-            if hint > empty_count:
-                for j in range(hint - empty_count):
-                    grids[row_id - j][i] = 1
-            row_id = row_id + 1
-
-    if DEBUG:
-        print_grids()
-
 def check_fix_grids(fix_value, line):
     for i in range(len(line)):
         if fix_value[i] == -1:
@@ -186,24 +160,22 @@ def update_fixed_grid_info():
     result = []
     for i in range(row_count):
         empty_count = col_count - (sum(row_hints[i]) + len(row_hints[i]) - 1)
-        result.append((True, i, count_fixed_grids(grids[i]), empty_count))
+        result.append((True, i, count_fixed_grids(grids[i]), empty_count, max(row_hints[i])))
 
     for i in range(col_count):
         empty_count = row_count - (sum(col_hints[i]) + len(col_hints[i]) - 1)
-        result.append((False, i, count_fixed_grids(get_col(i)), empty_count))
+        result.append((False, i, count_fixed_grids(get_col(i)), empty_count, max(col_hints[i])))
 
-    result.sort(key = lambda x: x[2] * 100 - x[3])
+    result.sort(key = lambda x: x[2] * 100 - x[3] + x[4])
     return result
 
 def init_results_all():
-    init_fixed_grids()
-
     fixed_grid_info = update_fixed_grid_info()
-    last_check_row_limit = [0] * row_count
-    last_check_col_limit = [0] * col_count
+    last_check_row_limit = [-1] * row_count
+    last_check_col_limit = [-1] * col_count
 
     while len(fixed_grid_info) > 0:
-        is_row, i, fix_count, empty_count = fixed_grid_info[-1]
+        is_row, i, fix_count, empty_count, max_count = fixed_grid_info[-1]
 
         is_updated = False
         if is_row:
